@@ -1,0 +1,226 @@
+---
+title: "An Exercise in Creating Useful GeoData"
+author: Drazzel Feliu
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+```{r, include=FALSE}
+rm(list=ls())
+```
+
+# Making Geo Data!
+
+We're going to be working on making a series of maps using a variety of packages resulting in varied types of display outputs. One will be simple image map that can be produced and included as an image file, while the other will be a complex map that can be operated interactively.
+
+### Disclaimer
+This is in no way an exhaustive guide to making maps. This is definitely me learning as I go and trying to reduce the learning curve for others. This ain't it, chief.
+
+## Moving On... To Useful Packages
+
+In order to create our image maps, we'll be primarily using the following packages.
+
+```{r, message=FALSE}
+library(tidyverse)
+library(ggmap)
+library(sf)
+library(viridis)
+```
+
+tidyverse will load ggplot, which will be key in making static image maps. And ggmap will allow you to use the Google Maps API to call upon Google Maps in your visualizations. *This requires setting that account up. I won't be covering this here.* sf will be vital to identifying and modifying spatial data that you'll be using throughout the mapping process. viridis will load color palettes that you can use for useful visualizations. It'll spare us some time too.
+
+```{r, message=FALSE}
+library(leaflet)
+library(maps)
+library(htmlwidgets)
+```
+
+leaflet will help us produce interactive maps using OpenStreet data. And htmlwidgets will allow us to save our map as a standalone html file. maps is probably very handy... but I didn't use it this time around. That may change in the future. This is V1, after all.
+
+```{r, message=FALSE}
+library(tidycensus)
+```
+
+We're loading tidycensus because it'll provide the data we will be mapping. You'll need an API for this as well, but it's relatively easy to acquire. So... not a lot of extra fuss before we get started.
+
+```{r, include=FALSE}
+# GOOGLE MAPS API KEY
+register_google("AIzaSyAed-muyJMsgXJ2lma9QTiBqJm9DL-IHPM")
+```
+
+Make sure to load the API's necessary. **Don't try to use the keys below. They're fake.**
+
+```{r, eval=FALSE}
+census_api_key("Q7lDbKntLoK97uGO0bsn5oYWkHAO3QEnQsaCLe2K",F,T)
+register_google("SrxRrFGSjmBklqE24pgmBmUbsRuGRrmKIHO4tQj5")
+```
+
+## Check Up
+
+Packages installed and loaded?
+API's acquired and verified?
+
+If you said yes to both, we can actually get to work now.
+
+# Image Map Setup
+
+We're going to pull an underlying map using ggmaps and the Google Maps API. We'll be using New York City as our working map because... it's where I'm from. Take your regional quibbles elsewhere for the moment.
+
+```{r, message=FALSE}
+nycunder <- get_map("New York City", zoom = 10)
+```
+
+So the get_map command is pulling the geography (New York City) and setting the zoom level (10). The higher the zoom value is the more zoomed in the map will be. Now that we have the map stored, we can pull the Census data that we'll be displaying.
+
+```{r, results='hide', message=FALSE}
+nycdata <- get_acs(geography = "tract",
+        variables = "B19013_001",
+        state = "NY",
+        county = c("New York","Kings","Queens","Bronx","Richmond"),
+        geometry = T,
+        year = 2017)
+```
+
+We're also requesting the actual data we'll be using. We're saving this as the variable nycdata and we're requesting some specific information. **Geography** is the definition of what level of data you'd prefer. You can access data at the census tract level like we've done above or you can request it at the block or county level. Blocks can add up and it may make managing the data a little difficult, but it certainly is as granular as it gets. Counties might be more useful if you'd like to make a broader analysis of a state, perhaps. Since NYC is only 5 counties, we're okay with using tract this time. **Variables** indicates what data from the ACS you'd like to actually use. You may want to refer to the codebook to ensure you get exactly what you'd like which you can get using tidycensus::load_variables.
+
+```{r, message=FALSE}
+codebook <- load_variables(2017,"acs5")
+```
+
+There are tons of variables for the 5-year ACS sample ending in 2017. Exactly 25,070. So... you know... your mileage may vary here in trying to navigate it. It helps to know exactly what you want beforehand. If not, use dplyr's filter function to sift through the variables and find what you need. We're using B19013_001, which is an estimate of median household income in the past 12 months (in 2017 inflation-adjusted dollars). **State** is pretty straightforward. We want NY. And I've distinctly specified the 5 counties associated with the 5 boroughs of New York City using **County**. You can do this with dplyr later if you'd like but for brevity's sake, I did it here. **Year** specifies the end year of a 3 or 5 year sample and the actual year of the full census. **Geometry** is going to be the most important part for this exercise because this contains the coordinates for the geography that you've requested and it will be key for actually doing the mapping.
+
+# Image Map Display
+
+```{r, results='hide', message=FALSE}
+imagemap <- ggmap(nycunder) +
+  geom_sf(nycdata,
+          mapping=aes(fill=estimate, color=estimate),
+          inherit.aes=F,
+          alpha=.7) +
+  scale_fill_viridis(option = "magma") + 
+  scale_color_viridis(option = "magma")
+```
+
+Okay. So let's break this down into chunks.
+
+```{r}
+ggmap(nycunder)
+```
+
+ggmap is displaying the underlying map that you requested from the Google Maps API (nycunder)
+
+```{r, warning=FALSE, message=FALSE}
+ggmap(nycunder) +
+  geom_sf(nycdata,
+          mapping=aes(fill=estimate, color=estimate),
+          inherit.aes=F,
+          alpha=.7)
+```
+
+geom_sf is then overlaying the census data using the values of the variable (fill=estimate & color=estimate) that we've retrieved and the coordinates of the census tracts. I've set some display options (alpha=.7) to make the map more legible by increasing the transparency of the color values on each census tract.
+
+```{r, warning=FALSE, message=FALSE}
+ggmap(nycunder) +
+  geom_sf(nycdata,
+          mapping=aes(fill=estimate, color=estimate),
+          inherit.aes=F,
+          alpha=.7) +
+  scale_fill_viridis(option = "magma") + 
+  scale_color_viridis(option = "magma")
+```
+
+The remaining options are changing the color value within the census tract (scale_fill_viridis) and of the census tract border (scale_color_viridis). viridis is providing the palette for the scale of the data.
+
+You'll notice that the census tracts without values (gray areas) are more prominent using this scale palette than with the previous color palette.
+
+Voila! Now you have an image map that can be exported. Using a variety of ggplot options you can also change the title of the legend and a title to the map itself (which I'm not going to do). But you can easily make those changes provided you have some familiarity with the language of ggplot.
+
+# Interactive Map
+
+Given that we've already generated the ACS data we plan on mapping, we can jump right into using leaflet to create an interactive version of the map we previously generated.
+
+## Color Mapping
+
+This time around we'll have to map the colors for our interactive map using leaflet's colorNumeric.
+
+```{r}
+nyccolor <- colorNumeric(
+  palette = "magma",
+  domain = nycdata$estimate)
+```
+
+colorNumeric is taking the numerical value of our estimate variable and assigning it a corresponding color value according to our viridis scale palette (magma).
+
+## The Actual Map
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+interactivemap <- leaflet() %>% setView(lng = -74.0060, lat = 40.7128, zoom = 11) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(data=st_geometry(nycdata),
+              fillColor = nyccolor(nycdata$estimate),
+              color = "magma",
+              weight= .3,
+              smoothFactor = .2,
+              fillOpacity = .55
+              )
+```
+
+So now to break down some of the code in pieces.
+
+```{r, warning=FALSE, message=FALSE}
+leaflet() %>% setView(lng = -74.0060, lat = 40.7128, zoom = 11) %>% 
+  addProviderTiles(providers$CartoDB.Positron)
+```
+
+leaflet() will pull up the leaflet infrastructure for the map and setView will allow you to identify the coordinates for the area and set the standard zoom for the map. As in the static image map, a larger zoom value sets the map closer. addProviderTiles gives a variety of options for the underlying geography for the map. The option (providers$CartoDB.Positron) shows one type of geography.
+
+```{r, warning=FALSE, message=FALSE}
+leaflet() %>% setView(lng = -74.0060, lat = 40.7128, zoom = 11) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addProviderTiles(providers$OpenRailwayMap)
+```
+
+There are several options available and they can even be overlaid using pipes (%>%) to stack different displays.
+
+```{r, warning=FALSE, message=FALSE}
+leaflet() %>% setView(lng = -74.0060, lat = 40.7128, zoom = 11) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(data=st_geometry(nycdata))
+```
+
+addPolygons then serves to create the shape display for our census data by using the coordinates of the census tracks and adding the values from our variable that we pulled from the ACS previously. Unfortunately... this is ugly. So we'll need to make a few changes in order to create a more usable visualization of our data. This is where our color mapping comes into play
+
+```{r, warning=FALSE, message=FALSE}
+leaflet() %>% setView(lng = -74.0060, lat = 40.7128, zoom = 11) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(data=st_geometry(nycdata),
+              fillColor = nyccolor(nycdata$estimate),
+              color = "magma")
+```
+
+Now we've got some usable color appended to our census tracts that is representative of their relative values on our scale.
+
+```{r, warning=FALSE, message=FALSE}
+leaflet() %>% setView(lng = -74.0060, lat = 40.7128, zoom = 11) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(data=st_geometry(nycdata),
+              fillColor = nyccolor(nycdata$estimate),
+              color = "magma",
+              weight= .3,
+              smoothFactor = .2,
+              fillOpacity = .55
+              )
+```
+
+We play with a few more display options to change the opacity and to smooth out the borders of our census tracts and we have a version of the map that is more usable.
+
+```{r, eval=FALSE}
+saveWidget(interactivemap,"interactivemap.html")
+```
+
+And now you can save your map as a webpage.
+
+# So... What's Missing
+
+We've left out some pretty serious and useful options for making a geo data visualization intuitive. We've included no legends. We've not included a title of any sort on any of these maps. We haven't added pop up banners on our interactive map so that you can see the actual value. We haven't really formatted the estimate values in dollars. I skipped all this stuff because it's relatively easy to implement these elements. The hardest part is getting your map up and running. And this should cover a lot of the heavy lifting on that front.
+
+There are plenty of more complex options that with some searching can help you create the map that you want. Hope this helps.
